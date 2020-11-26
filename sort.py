@@ -193,9 +193,13 @@ class Sort(object):
         self.frame_count = 0
 
     """
-    :param dets: 输入的 dets 是检测结果，形式为 [x1, y1, x2, y2, score] 
+    :param dets: 输入的 dets 是检测结果，形式为 [x1, y1, x2, y2, score]
+     
+    SORT 跟踪算法到底在干什么？
+    1.假设 T1 时刻成功跟踪了某个单个物体，ID 为 1，绘制物体跟踪 BBox（紫色）
+    2.T2 时刻物体检测 BBox 总共有 4 个（黑色），预测T2时刻物体跟踪的 BBox（紫色）有1个，解决紫色物体跟踪BBox如何与黑色物体检测 BBox 关联的算法，就是 SORT 物体跟踪算法要解决的核心问题
+    3.SORT 关联两个 BBox 的核心算法是：用 IoU 计算 Bbox 之间的距离 + 匈牙利算法选择最优关联结果
     """
-
     def update(self, dets):
         """
         Params:

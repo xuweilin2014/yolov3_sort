@@ -6,12 +6,11 @@ import time
 import cv2
 import os
 import glob
+from sort import *
 
 files = glob.glob('output/*.png')
 for f in files:
     os.remove(f)
-
-from sort import *
 
 tracker = Sort()
 memory = {}
@@ -43,22 +42,20 @@ LABELS = open(labelsPath).read().strip().split("\n")
 
 # initialize a list of colors to represent each possible class label
 np.random.seed(42)
-COLORS = np.random.randint(0, 255, size=(200, 3),
-                           dtype="uint8")
+COLORS = np.random.randint(0, 255, size=(200, 3), dtype="uint8")
 
 # derive the paths to the YOLO weights and model configuration
 weightsPath = os.path.sep.join([args["yolo"], "yolov3.weights"])
 configPath = os.path.sep.join([args["yolo"], "yolov3.cfg"])
 
-# load our YOLO object detector trained on COCO dataset (80 classes)
-# and determine only the *output* layer names that we need from YOLO
+# load our YOLO object detector trained on COCO dataset (80 classes) and determine only the *output* layer names
+# that we need from YOLO
 print("[INFO] loading YOLO from disk...")
 net = cv2.dnn.readNetFromDarknet(configPath, weightsPath)
 ln = net.getLayerNames()
 ln = [ln[i[0] - 1] for i in net.getUnconnectedOutLayers()]
 
-# initialize the video stream, pointer to output video file, and
-# frame dimensions
+# initialize the video stream, pointer to output video file, and frame dimensions
 vs = cv2.VideoCapture(args["input"])
 writer = None
 (W, H) = (None, None)
@@ -67,13 +64,10 @@ frameIndex = 0
 
 # try to determine the total number of frames in the video file
 try:
-    prop = cv2.cv.CV_CAP_PROP_FRAME_COUNT if imutils.is_cv2() \
-        else cv2.CAP_PROP_FRAME_COUNT
+    prop = cv2.cv.CV_CAP_PROP_FRAME_COUNT if imutils.is_cv2() else cv2.CAP_PROP_FRAME_COUNT
     total = int(vs.get(prop))
     print("[INFO] {} total frames in video".format(total))
-
-# an error occurred while trying to determine the total
-# number of frames in the video file
+# an error occurred while trying to determine the total number of frames in the video file
 except:
     print("[INFO] could not determine # of frames in video")
     print("[INFO] no approx. completion time can be provided")
@@ -84,8 +78,7 @@ while True:
     # read the next frame from the file
     (grabbed, frame) = vs.read()
 
-    # if the frame was not grabbed, then we have reached the end
-    # of the stream
+    # if the frame was not grabbed, then we have reached the end of the stream
     if not grabbed:
         break
 
@@ -96,15 +89,22 @@ while True:
     # construct a blob from the input frame and then perform a forward
     # pass of the YOLO object detector, giving us our bounding boxes
     # and associated probabilities
-    blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416),
-                                 swapRB=True, crop=False)
+
+    # cv2.dnn.blobFromImage 方法参数为:
+    # image: 传入的需要进行处理的图像
+    # scalefactor: 执行完减均值后，需要缩放图像就需要乘以 scalefactor，默认是 1
+    # size: 这是神经网络，真正支持输入的值
+    # mean: 这是我们要减去的均值，可以是 R,G,B 均值三元组，或者是一个值，每个通道都减这值
+    # swapRB: OpenCV认为图像 通道顺序是B、G、R，而减均值时顺序是R、G、B，为了解决这个矛盾，设置swapRB=True即可
+    # yolo 模型在进行训练的时候，图片中的像素点的值都乘以了 1/255 将其压缩到 (0,1) 之间，所以我们在使用 yolo 模型进行检测的时候也要
+    # 乘以一个缩放系数
+    blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
     start = time.time()
     layerOutputs = net.forward(ln)
     end = time.time()
 
-    # initialize our lists of detected bounding boxes, confidences,
-    # and class IDs, respectively
+    # initialize our lists of detected bounding boxes, confidences, and class IDs, respectively
     boxes = []
     confidences = []
     classIDs = []
@@ -113,39 +113,37 @@ while True:
     for output in layerOutputs:
         # loop over each of the detections
         for detection in output:
-            # extract the class ID and confidence (i.e., probability)
-            # of the current object detection
+            # extract the class ID and confidence (i.e., probability) of the current object detection
+            # detection 一共有 85 个维度，分别是 [center_x, center_y, width, height, confidence, class_0_pro, class_1_pro, class_2_pro, class_3_pro ...]
+            # 加载的 yolo 模型可以识别 80 个类别的物体，所以后面 80 个维度是我们识别的物体 80 在个 class 上的 confidence
             scores = detection[5:]
             classID = np.argmax(scores)
             confidence = scores[classID]
 
-            # filter out weak predictions by ensuring the detected
-            # probability is greater than the minimum probability
+            # filter out weak predictions by ensuring the detected probability is greater than the minimum probability
             if confidence > args["confidence"]:
-                # scale the bounding box coordinates back relative to
-                # the size of the image, keeping in mind that YOLO
-                # actually returns the center (x, y)-coordinates of
-                # the bounding box followed by the boxes' width and
-                # height
+                # scale the bounding box coordinates back relative to the size of the image, keeping in mind that YOLO
+                # actually returns the center (x, y)-coordinates of the bounding box followed by the boxes' width and height
+                # box 的维度为 (center_x, center_y, width, height)
                 box = detection[0:4] * np.array([W, H, W, H])
                 (centerX, centerY, width, height) = box.astype("int")
 
-                # use the center (x, y)-coordinates to derive the top
-                # and and left corner of the bounding box
+                # use the center (x, y)-coordinates to derive the top and and left corner of the bounding box
                 x = int(centerX - (width / 2))
                 y = int(centerY - (height / 2))
 
-                # update our list of bounding box coordinates,
-                # confidences, and class IDs
+                # update our list of bounding box coordinates, confidences, and class IDs
+                # 加入到 boxes 中的 box 的维度为 (left_x, top_y, width, height)
                 boxes.append([x, y, int(width), int(height)])
                 confidences.append(float(confidence))
                 classIDs.append(classID)
 
-    # apply non-maxima suppression to suppress weak, overlapping
-    # bounding boxes
+    # apply non-maxima suppression to suppress weak, overlapping bounding boxes
     idxs = cv2.dnn.NMSBoxes(boxes, confidences, args["confidence"], args["threshold"])
 
     dets = []
+
+    # 将经过极大值抑制处理的 dets 格式转变为 [left_x, top_y, right_x, bottom_y]
     if len(idxs) > 0:
         # loop over the indexes we are keeping
         for i in idxs.flatten():
@@ -175,38 +173,18 @@ while True:
             (x, y) = (int(box[0]), int(box[1]))
             (w, h) = (int(box[2]), int(box[3]))
 
-            # draw a bounding box rectangle and label on the image
-            # color = [int(c) for c in COLORS[classIDs[i]]]
-            # cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-
             color = [int(c) for c in COLORS[indexIDs[i] % len(COLORS)]]
             cv2.rectangle(frame, (x, y), (w, h), color, 2)
 
-            if indexIDs[i] in previous:
-                previous_box = previous[indexIDs[i]]
-                (x2, y2) = (int(previous_box[0]), int(previous_box[1]))
-                (w2, h2) = (int(previous_box[2]), int(previous_box[3]))
-                p0 = (int(x + (w - x) / 2), int(y + (h - y) / 2))
-                p1 = (int(x2 + (w2 - x2) / 2), int(y2 + (h2 - y2) / 2))
-                cv2.line(frame, p0, p1, color, 3)
-
-                if intersect(p0, p1, line[0], line[1]):
-                    counter += 1
-
-            # text = "{}: {:.4f}".format(LABELS[classIDs[i]], confidences[i])
             text = "{}".format(indexIDs[i])
             cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             i += 1
 
-    # draw line
-    cv2.line(frame, line[0], line[1], (0, 255, 255), 5)
-
-    # draw counter
-    cv2.putText(frame, str(counter), (100, 200), cv2.FONT_HERSHEY_DUPLEX, 5.0, (0, 255, 255), 10)
-    # counter += 1
-
     # saves image file
-    cv2.imwrite("output/frame-{}.png".format(frameIndex), frame)
+    cv2.imshow("output", frame)
+    # Press Q to stop!
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
     # check if the video writer is None
     if writer is None:
