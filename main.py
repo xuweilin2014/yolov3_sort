@@ -27,15 +27,6 @@ ap.add_argument("-t", "--threshold", type=float, default=0.3, help="threshold wh
 args = vars(ap.parse_args())
 
 
-# Return true if line segments AB and CD intersect
-def intersect(A, B, C, D):
-    return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
-
-
-def ccw(A, B, C):
-    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
-
-
 # load the COCO class labels our YOLO model was trained on
 labelsPath = os.path.sep.join([args["yolo"], "coco.names"])
 LABELS = open(labelsPath).read().strip().split("\n")
@@ -153,6 +144,8 @@ while True:
 
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
     dets = np.asarray(dets)
+
+    # 将前面处理好的 detections 和 trackers 使用 SORT 算法进行匹配
     tracks = tracker.update(dets)
 
     boxes = []
@@ -190,15 +183,13 @@ while True:
     if writer is None:
         # initialize our video writer
         fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-        writer = cv2.VideoWriter(args["output"], fourcc, 30,
-                                 (frame.shape[1], frame.shape[0]), True)
+        writer = cv2.VideoWriter(args["output"], fourcc, 30, (frame.shape[1], frame.shape[0]), True)
 
         # some information on processing single frame
         if total > 0:
             elap = (end - start)
             print("[INFO] single frame took {:.4f} seconds".format(elap))
-            print("[INFO] estimated total time to finish: {:.4f}".format(
-                elap * total))
+            print("[INFO] estimated total time to finish: {:.4f}".format(elap * total))
 
     # write the output frame to disk
     writer.write(frame)

@@ -42,7 +42,7 @@ def convert_bbox_to_z(bbox):
     return np.array([x, y, s, r]).reshape((4, 1))
 
 
-# 将 bbox 由 [x,y,s,r] 形式转为 [x1,y1,x2,y2] 形式
+# 将 bbox 由 [center_x, center_y,s,r] 形式转为 [x1,y1,x2,y2] 形式
 def convert_x_to_bbox(x, score=None):
     """
     Takes a bounding box in the centre form [x,y,s,r] and returns it in the form
@@ -127,9 +127,10 @@ def associate_detections_to_trackers(detections, trackers, iou_threshold=0.3):
     Assigns detections to tracked object (both represented as bounding boxes)
     Returns 3 lists of matches, unmatched_detections and unmatched_trackers
     """
-    # 如果跟踪器为空
+    # 如果跟踪器为空或者检测器为空
     if (len(trackers) == 0) or (len(detections) == 0):
         return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0, 5), dtype=int)
+    # iou_matrix 矩阵大小为 (det_num, track_num)，表示每一个检测器和每一个跟踪器之间的 iou 值
     iou_matrix = np.zeros((len(detections), len(trackers)), dtype=np.float32)
 
     # 计算检测器与跟踪器 IoU 矩阵
@@ -263,10 +264,14 @@ class Sort(object):
         for trk in reversed(self.trackers):
             # 获取 tracker 跟踪器的状态 [x1, y1, x2, y2]
             d = trk.get_state()[0]
+            # 只有满足以下两个条件时，tracker 才会被作为结果返回：
+            # 1.在当前图像中，tracker 匹配到了目标，并且已经连续匹配上了 3 次
+            # 2.在当前图像中，tracker 匹配到了目标，当前图像的帧数小于等于 3，也就是一共处理的图像帧数还没有到达 3 帧
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
                 ret.append(np.concatenate((d, [trk.id + 1])).reshape(1, -1))  # +1 as MOT benchmark requires positive
             i -= 1
             # remove dead tracklet
+            # 如果某个 tracker 失配超过了 max_age 次，那么就将其从 trackers 集合中删除
             if trk.time_since_update > self.max_age:
                 self.trackers.pop(i)
 
